@@ -4,7 +4,7 @@ import torch
 
 import pyro
 import pyro.poutine as poutine
-from pyro.infer.abstract_infer import TracePosterior
+from pyro.infer.abstract_infer import TracePosterior, sampler_default_args
 from pyro.infer.elbo import ELBO
 from pyro.infer.util import torch_item
 
@@ -66,11 +66,12 @@ class SVI(TracePosterior):
                     self.step(*args, **kwargs)
         return super(SVI, self).run(*args, **kwargs)
 
+    @sampler_default_args
     def _traces(self, *args, **kwargs):
         for i in range(self.num_samples):
             guide_trace = poutine.trace(self.guide).get_trace(*args, **kwargs)
             model_trace = poutine.trace(poutine.replay(self.model, trace=guide_trace)).get_trace(*args, **kwargs)
-            yield model_trace, 1.0
+            yield model_trace
 
     def evaluate_loss(self, *args, **kwargs):
         """

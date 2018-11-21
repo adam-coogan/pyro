@@ -1,5 +1,6 @@
 from __future__ import absolute_import, division, print_function
 
+import functools
 from abc import ABCMeta, abstractmethod
 from collections import OrderedDict
 
@@ -9,6 +10,7 @@ from six import add_metaclass
 import pyro.poutine as poutine
 from pyro.distributions import Categorical, Empirical
 import pyro.ops.stats as stats
+from pyro.poutine import Trace
 
 
 class EmpiricalMarginal(Empirical):
@@ -39,6 +41,22 @@ class EmpiricalMarginal(Empirical):
             value = tr.nodes[sites]["value"] if isinstance(sites, str) else \
                 torch.stack([tr.nodes[site]["value"] for site in sites], 0)
             self.add(value, log_weight=log_weight)
+
+
+def sampler_default_args(trace_gen):
+    """
+    Wrapper for TracePosterior instances' `_traces` method that returns
+    default values for ``weight`` (default=1.0) and ``chain_id`` (default=0).
+    """
+    @functools.wraps(trace_gen)
+    def _fn(*args, **kwargs):
+        for val in trace_gen(*args, **kwargs):
+            if isinstance(val, Trace):
+                val = val, 1.0, 0
+            elif len(val) == 2:
+                val = val[0], val[1], 0
+            yield val
+    return _fn
 
 
 @add_metaclass(ABCMeta)

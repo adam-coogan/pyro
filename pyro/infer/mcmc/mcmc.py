@@ -17,6 +17,7 @@ import torch.multiprocessing as mp
 
 import pyro
 from pyro.infer import TracePosterior
+from pyro.infer.abstract_infer import sampler_default_args
 from pyro.infer.mcmc.logger import initialize_logger, initialize_progbar, DIAGNOSTIC_MSG, TqdmHandler
 from pyro.util import optional
 
@@ -78,8 +79,8 @@ class _Worker(object):
         kwargs["logger_id"] = "CHAIN:{}".format(self.chain_id)
         kwargs["log_queue"] = self.log_queue
         try:
-            for tr, weight, _ in self.trace_gen._traces(*args, **kwargs):
-                self.result_queue.put_nowait((self.chain_id, (tr, weight)))
+            for tr in self.trace_gen._traces(*args, **kwargs):
+                self.result_queue.put_nowait((self.chain_id, tr))
             self.result_queue.put_nowait((self.chain_id, None))
         except Exception as e:
             self.trace_gen.logger.exception(e)
@@ -159,8 +160,7 @@ class _ParallelSampler(TracePosterior):
                     # Exception trace is already logged by worker.
                     raise val
                 if val is not None:
-                    trace, weight = val
-                    yield trace, weight, chain_id
+                    yield val, 1.0, chain_id
                 else:
                     active_workers -= 1
         finally:
@@ -202,7 +202,7 @@ class _SingleSampler(TracePosterior):
             if progress_bar:
                 progress_bar.set_description("Sample")
             for trace in self._gen_samples(self.num_samples, trace):
-                yield trace, 1.0, 0  # (trace, weight, chain_id)
+                yield trace
         self.kernel.cleanup()
 
 
@@ -250,6 +250,7 @@ class MCMC(TracePosterior):
         else:
             self.sampler = _SingleSampler(kernel, num_samples, warmup_steps)
 
+    @sampler_default_args
     def _traces(self, *args, **kwargs):
         for sample in self.sampler._traces(*args, **kwargs):
             yield sample
